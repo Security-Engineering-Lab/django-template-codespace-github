@@ -62,6 +62,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 ### **Мінімальний YAML без складних перевірок:**---
 
+```yaml
+
 # Minimal Django Pipeline - No parallelism required
 name: Django-Simple-Deploy-$(Date:yyyyMMdd)$(Rev:.r)
 
@@ -139,7 +141,7 @@ stages:
         echo "🌐 Your app should be available at: https://$(webAppName).azurewebsites.net"
       displayName: 'Deployment summary'
 
-
+```
 
 ## 🚀 **Рішення 5: Використовувайте GitHub Actions (альтернатива)**
 
