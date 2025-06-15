@@ -45,64 +45,85 @@ fi
 # Перевіряємо версію
 az version --output table || echo "⚠️ Azure CLI installed but version check failed"
 
-
-
-
-
-
-RESOURCE_GROUP="rg-django-student"
-CONTAINER_NAME="django-student-$(date +%s)"
-LOCATION="Central US"  # Спробуємо інший регіон
+RESOURCE_GROUP="rg-django-fixed"
+CONTAINER_NAME="django-fixed-$(date +%s)"
+LOCATION="Central US"
 
 echo "📋 Configuration:"
 echo "   Resource Group: $RESOURCE_GROUP"
 echo "   Container Name: $CONTAINER_NAME"
 echo "   Location: $LOCATION"
-echo "   Subscription: Student"
 
-# Переключаємося на студентську підписку
-echo "🔄 Switching to student subscription..."
-az account set --subscription "Azure для учащихся"
+# Перевіряємо Azure CLI
+if ! command -v az &> /dev/null; then
+    echo "Installing Azure CLI..."
+    sudo apt-get update && sudo apt-get install azure-cli -y
+fi
+
+# Авторизація
+echo "🔐 Checking Azure login..."
+if ! az account show &> /dev/null; then
+    echo "Please login to Azure:"
+    az login --use-device-code
+fi
+
+# Показуємо доступні підписки
+echo "📊 Available subscriptions:"
+az account list --output table
+
+# Даємо користувачу вибрати підписку
+echo ""
+read -p "Enter subscription name or ID (or press Enter for current): " SUBSCRIPTION_INPUT
+
+if [ ! -z "$SUBSCRIPTION_INPUT" ]; then
+    echo "🔄 Switching to subscription: $SUBSCRIPTION_INPUT"
+    az account set --subscription "$SUBSCRIPTION_INPUT"
+fi
+
+# Показуємо поточну підписку
+CURRENT_SUBSCRIPTION=$(az account show --query name -o tsv)
+echo "✅ Using subscription: $CURRENT_SUBSCRIPTION"
 
 # Реєструємо providers
 echo "📝 Registering providers..."
-az provider register --namespace Microsoft.ContainerInstance
-az provider register --namespace Microsoft.Web
-
-# Чекаємо завершення реєстрації
-echo "⏳ Waiting for provider registration..."
-while [[ $(az provider show --namespace Microsoft.ContainerInstance --query registrationState -o tsv) != "Registered" ]]; do
-    echo "   Still registering..."
-    sleep 10
-done
-echo "✅ Providers registered!"
+az provider register --namespace Microsoft.ContainerInstance --output none
+az provider register --namespace Microsoft.Web --output none
 
 # Створюємо resource group
 echo "🏗️ Creating resource group..."
-az group create --name $RESOURCE_GROUP --location "$LOCATION"
+az group create --name $RESOURCE_GROUP --location "$LOCATION" --output table
 
-# Створюємо контейнер з Microsoft зразком
-echo "🚀 Creating container with Microsoft sample..."
+# Створюємо простий контейнер
+echo "🚀 Creating container..."
 az container create \
     --resource-group $RESOURCE_GROUP \
     --name $CONTAINER_NAME \
     --image "mcr.microsoft.com/azuredocs/aci-helloworld:latest" \
-    --cpu 1 \
-    --memory 1 \
+    --cpu 0.5 \
+    --memory 0.5 \
     --ip-address public \
     --ports 80 \
-    --location "$LOCATION"
+    --location "$LOCATION" \
+    --output table
+
+# Чекаємо створення контейнера
+echo "⏳ Waiting for container to start..."
+sleep 60
 
 # Отримуємо IP
-echo "📍 Getting container IP..."
-sleep 30
-CONTAINER_IP=$(az container show \
+echo "📍 Getting container details..."
+CONTAINER_INFO=$(az container show \
     --resource-group $RESOURCE_GROUP \
     --name $CONTAINER_NAME \
-    --query ipAddress.ip \
-    --output tsv)
+    --query "{ip:ipAddress.ip,state:instanceView.state}" \
+    --output json)
 
-if [ ! -z "$CONTAINER_IP" ] && [ "$CONTAINER_IP" != "null" ]; then
+CONTAINER_IP=$(echo $CONTAINER_INFO | python3 -c "import sys, json; print(json.load(sys.stdin).get('ip', 'N/A'))")
+CONTAINER_STATE=$(echo $CONTAINER_INFO | python3 -c "import sys, json; print(json.load(sys.stdin).get('state', 'Unknown'))")
+
+echo "📊 Container Status: $CONTAINER_STATE"
+
+if [ "$CONTAINER_IP" != "N/A" ] && [ "$CONTAINER_IP" != "null" ]; then
     echo "✅ Container deployed successfully!"
     echo "🌐 Your app: http://$CONTAINER_IP"
     echo "💰 Cost: ~$3-5/month"
@@ -111,19 +132,30 @@ if [ ! -z "$CONTAINER_IP" ] && [ "$CONTAINER_IP" != "null" ]; then
     
     # Тестуємо підключення
     echo "🔍 Testing connection..."
+    sleep 30
     HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://$CONTAINER_IP" --connect-timeout 10 || echo "000")
+    
     if [ "$HTTP_STATUS" -eq 200 ]; then
-        echo "✅ Connection test passed!"
+        echo "✅ Connection test passed! Your app is running."
     else
         echo "⚠️ Connection test failed: HTTP $HTTP_STATUS"
+        echo "Container might still be starting. Try again in a few minutes."
     fi
 else
     echo "❌ Failed to get container IP"
+    echo "🔍 Checking container status..."
+    az container show --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME --output table
+    
     echo "🔍 Checking container logs..."
     az container logs --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME
 fi
 
 echo ""
 echo "📝 Useful commands:"
+echo "   View status: az container show --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME --output table"
 echo "   View logs: az container logs --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME"
+echo "   Restart: az container restart --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME"
 echo "   Delete all: az group delete --name $RESOURCE_GROUP --yes --no-wait"
+
+
+
