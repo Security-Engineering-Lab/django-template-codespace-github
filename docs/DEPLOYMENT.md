@@ -490,3 +490,561 @@ chmod +x deploy-to-azure.sh
 
 -------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+
+----------------------------------------------------------------------------------------
+
+
+Проблема в тому, що у вашій Azure підписці **немає квоти для безкоштовних VM** (Free tier). Ось рішення:
+
+## 🚨 **Основна проблема:**
+```
+Current Limit (Free VMs): 0
+Amount required for this deployment (Free VMs): 1
+```
+
+## 🔧 **Рішення:**
+
+### **Варіант 1: Запросити збільшення квоти (Рекомендовано)**
+
+```bash
+# Перевірте поточні квоти
+az vm list-usage --location "East US" --output table
+
+# Запросіть збільшення квоти через Azure Portal
+```
+
+**Кроки через Azure Portal:**
+1. Відкрийте https://portal.azure.com
+2. Перейдіть до **"Help + support"**
+3. **"New support request"**
+4. **Issue type:** Service and subscription limits (quotas)
+5. **Quota type:** Compute-VM (cores-vCPUs) subscription limit increases
+6. **Request:** Free tier VM quota increase to 1
+
+---
+
+### **Варіант 2: Використати платний tier (B1 Basic)**### **Варіант 3: Спробувати інший регіон**
+
+```bash
+# Перевірте доступні регіони
+az account list-locations --output table
+
+# Спробуйте інші регіони де може бути квота
+LOCATION="West US 2"  # або "Central US", "West Europe"
+```
+
+---
+
+### **Варіант 4: Використати Azure Container Instances (дешевше)**---
+
+## ✅ **Рекомендовані дії:**
+
+### **🎯 Найкращий варіант для навчання:**
+
+1. **Запросіть збільшення квоти** через Azure Portal
+2. **Тимчасово використайте Basic tier** (~$13/місяць)
+3. **Видаліть ресурси** після тестування
+
+### **💡 Швидке рішення:**
+
+```bash
+# Видаліть поточні ресурси
+az group delete --name rg-django-template --yes --no-wait
+
+# Використайте Basic tier
+chmod +x deploy-basic-tier.sh
+./deploy-basic-tier.sh
+```
+
+### **🔍 Перевірте квоти:**
+
+```bash
+# Перевірте поточні ліміти
+az vm list-usage --location "East US" --output table
+az vm list-usage --location "West US 2" --output table
+```
+
+**Який варіант оберете?** Basic tier дасть вам повний досвід Azure App Service за невелику плату (~$13/місяць), яку можна скасувати після навчання.
+
+
+
+
+
+
+
+----------------------------------------------------------------------------------------------
+Проблема все ще та сама - Azure CLI не встановлено. Давайте встановимо його спочатку:
+
+## 🔧 **Встановлення Azure CLI**
+
+### **Виконайте ці команди:**
+
+```bash
+# 1. Оновіть систему
+sudo apt-get update
+
+# 2. Встановіть необхідні залежності
+sudo apt-get install ca-certificates curl apt-transport-https lsb-release gnupg -y
+
+# 3. Створіть директорію для ключів
+sudo mkdir -p /etc/apt/keyrings
+
+# 4. Додайте Microsoft GPG ключ
+curl -sLS https://packages.microsoft.com/keys/microsoft.asc | \
+    gpg --dearmor | \
+    sudo tee /etc/apt/keyrings/microsoft.gpg > /dev/null
+
+sudo chmod go+r /etc/apt/keyrings/microsoft.gpg
+
+# 5. Додайте Azure CLI репозиторій
+AZ_REPO=$(lsb_release -cs)
+echo "deb [arch=`dpkg --print-architecture` signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" | \
+    sudo tee /etc/apt/sources.list.d/azure-cli.list
+
+# 6. Оновіть індекс пакетів і встановіть Azure CLI
+sudo apt-get update
+sudo apt-get install azure-cli -y
+
+# 7. Перевірте встановлення
+az --version
+```
+
+### **Або швидкий спосіб одною командою:**
+
+```bash
+curl -sL https://aka.ms/InstallAzureCli | sudo bash
+```
+
+---
+
+## ✅ **Після встановлення:**
+
+### **1. Перевірте Azure CLI:**
+```bash
+az --version
+which az
+```
+
+### **2. Увійдіть в Azure:**
+```bash
+az login --use-device-code
+```
+
+### **3. Запустіть скрипт заново:**
+```bash
+./deploy-basic-tier.sh
+```
+
+---
+
+## 🚀 **Альтернативний спосіб через Azure Cloud Shell:**
+
+Якщо встановлення локально не працює, використайте Azure Cloud Shell:
+
+### **1. Відкрийте Azure Portal:**
+- Перейдіть на https://portal.azure.com
+- Натисніть іконку Cloud Shell (>_) у верхній панелі
+
+### **2. Завантажте ваш код:**
+```bash
+# У Cloud Shell
+git clone https://github.com/Security-Engineering-Lab/django-template-codespace-github.git
+cd django-template-codespace-github
+```
+
+### **3. Запустіть розгортання:**
+```bash
+chmod +x deploy-basic-tier.sh
+./deploy-basic-tier.sh
+```
+
+---
+
+## 🔧 **Виправлений скрипт з перевіркою Azure CLI:**## ✅ **Виконайте:**
+
+### **1. Спочатку встановіть Azure CLI:**
+```bash
+sudo apt-get update && sudo apt-get install azure-cli -y
+```
+
+### **2. Перевірте встановлення:**
+```bash
+az --version
+```
+
+### **3. Використайте новий скрипт:**
+```bash
+chmod +x deploy-with-cli-install.sh
+./deploy-with-cli-install.sh
+```
+
+Цей скрипт автоматично встановить Azure CLI якщо його немає, а потім виконає розгортання. **Який варіант спробуєте?**
+
+
+
+-----------------------------------------------------------------------------
+
+
+Проблема в тому, що у вашій Azure підписці **також немає квоти для Basic tier VM**. Це означає, що обидві підписки мають ліміт 0 для віртуальних машин.
+
+## 🚨 **Проблема:**
+```
+Current Limit (Basic VMs): 0
+Amount required for this deployment (Basic VMs): 1
+```
+
+## 🔧 **Рішення:**
+
+### **Варіант 1: Спробуйте іншу підписку**
+
+У вас є доступ до двох підписок:
+- **Azure subscription 1** (поточна) - без квоти
+- **Azure для учащихся** - може мати квоту
+
+```bash
+# Переключіться на студентську підписку
+az account set --subscription "826d896f-b844-48c3-998e-c8e36c27e681"
+
+# Перевірте квоти в цій підписці
+az vm list-usage --location "East US" --output table
+
+# Спробуйте розгортання знову
+./deploy-with-cli-install.sh
+```
+
+---
+
+### **Варіант 2: Спробуйте інший регіон**### **Варіант 3: Azure Static Web Apps (БЕЗКОШТОВНО!)**## ✅ **Рекомендовані дії:**
+
+
+```bash
+#!/bin/bash
+
+echo "🚀 Django deployment with multiple region attempts..."
+
+# Список регіонів для спроби
+REGIONS=("West US 2" "Central US" "West Europe" "East US 2" "South Central US")
+RESOURCE_GROUP="rg-django-template"
+APP_SERVICE_PLAN="asp-django-template"
+WEB_APP_NAME="django-template-$(date +%s)"
+SKU="F1"  # Спробуємо знову Free tier
+
+echo "📋 Configuration:"
+echo "   Resource Group: $RESOURCE_GROUP"
+echo "   Web App Name: $WEB_APP_NAME"
+echo "   SKU: $SKU (Free tier)"
+
+# Перевіряємо автентифікацію
+if ! az account show &> /dev/null; then
+    echo "Please login to Azure:"
+    az login --use-device-code
+fi
+
+# Переключаємося на студентську підписку
+echo "🔄 Switching to student subscription..."
+az account set --subscription "826d896f-b844-48c3-998e-c8e36c27e681"
+
+SUBSCRIPTION=$(az account show --query name -o tsv)
+echo "📊 Using subscription: $SUBSCRIPTION"
+
+# Видаляємо попередні ресурси
+echo "🧹 Cleaning up previous resources..."
+az group delete --name $RESOURCE_GROUP --yes --no-wait 2>/dev/null || echo "No previous resources"
+sleep 20
+
+# Спробуємо кожен регіон
+for LOCATION in "${REGIONS[@]}"; do
+    echo ""
+    echo "🌍 Trying region: $LOCATION"
+    
+    # Перевіряємо квоти в цьому регіоні
+    echo "   Checking quotas..."
+    QUOTA_CHECK=$(az vm list-usage --location "$LOCATION" --query "[?name.value=='standardDSv3Family'].{current:currentValue,limit:limit}" --output tsv 2>/dev/null)
+    
+    if [ $? -eq 0 ]; then
+        echo "   Quota check passed for $LOCATION"
+        
+        # Створюємо resource group
+        echo "   Creating resource group..."
+        if az group create --name $RESOURCE_GROUP --location "$LOCATION" --output table; then
+            
+            # Спробуємо створити App Service Plan
+            echo "   Creating App Service Plan..."
+            if az appservice plan create \
+                --name $APP_SERVICE_PLAN \
+                --resource-group $RESOURCE_GROUP \
+                --sku $SKU \
+                --is-linux \
+                --output table; then
+                
+                echo "✅ Success in $LOCATION! Continuing with deployment..."
+                
+                # Створюємо Web App
+                echo "   Creating Web App..."
+                az webapp create \
+                    --name $WEB_APP_NAME \
+                    --resource-group $RESOURCE_GROUP \
+                    --plan $APP_SERVICE_PLAN \
+                    --runtime "PYTHON|3.12" \
+                    --output table
+                
+                # Налаштування
+                echo "   Configuring Web App..."
+                az webapp config appsettings set \
+                    --name $WEB_APP_NAME \
+                    --resource-group $RESOURCE_GROUP \
+                    --settings \
+                        DJANGO_SETTINGS_MODULE="hello_world.settings" \
+                        DJANGO_DEBUG="False" \
+                        SCM_DO_BUILD_DURING_DEPLOYMENT="true" \
+                    --output table
+                
+                # Підготовка коду
+                echo "📦 Preparing deployment..."
+                python manage.py collectstatic --noinput
+                
+                zip -r deployment.zip . \
+                    -x "*.git*" "*__pycache__*" "*.pyc" "venv/*" "env/*" \
+                       "*.md" ".devcontainer/*" "docs/*" "*.log" \
+                       "deployment.zip" "*deploy*.sh"
+                
+                # Розгортання
+                echo "🚀 Deploying..."
+                az webapp deploy \
+                    --name $WEB_APP_NAME \
+                    --resource-group $RESOURCE_GROUP \
+                    --src-path deployment.zip \
+                    --type zip
+                
+                # Startup команда
+                az webapp config set \
+                    --name $WEB_APP_NAME \
+                    --resource-group $RESOURCE_GROUP \
+                    --startup-file "gunicorn --bind=0.0.0.0 --timeout 600 hello_world.wsgi"
+                
+                # Перезапуск
+                az webapp restart \
+                    --name $WEB_APP_NAME \
+                    --resource-group $RESOURCE_GROUP
+                
+                # Health check
+                APP_URL="https://$WEB_APP_NAME.azurewebsites.net"
+                echo "🏥 Health check..."
+                sleep 90
+                
+                HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $APP_URL --connect-timeout 30 || echo "000")
+                
+                if [ "$HTTP_STATUS" -eq 200 ]; then
+                    echo "✅ Deployment successful!"
+                    echo "🌐 Your Django app: $APP_URL"
+                    echo "📍 Region: $LOCATION"
+                    echo "💰 Cost: FREE (F1 tier)"
+                    rm -f deployment.zip
+                    exit 0
+                else
+                    echo "⚠️ Health check failed: HTTP $HTTP_STATUS"
+                fi
+                
+                rm -f deployment.zip
+                break
+                
+            else
+                echo "❌ Failed to create App Service Plan in $LOCATION"
+                # Видаляємо resource group і спробуємо наступний регіон
+                az group delete --name $RESOURCE_GROUP --yes --no-wait 2>/dev/null
+                continue
+            fi
+        else
+            echo "❌ Failed to create resource group in $LOCATION"
+            continue
+        fi
+    else
+        echo "⚠️ Quota check failed for $LOCATION"
+        continue
+    fi
+done
+
+echo ""
+echo "❌ All regions failed. Possible solutions:"
+echo "1. Request quota increase: https://portal.azure.com → Support → New support request"
+echo "2. Try different subscription with available quota"
+echo "3. Use Azure Container Instances instead"
+
+```
+
+
+### **🎯 Спробуйте в такому порядку:**
+
+1. **Переключіться на студентську підписку і спробуйте різні регіони:**
+```bash
+chmod +x deploy-multi-region.sh
+./deploy-multi-region.sh
+```
+
+2. **Якщо це не спрацює, запросіть збільшення квоти:**
+   - Перейдіть на https://portal.azure.com
+   - **Support** → **New support request**
+   - **Issue type:** Service and subscription limits (quotas)
+   - **Quota type:** Compute-VM (cores-vCPUs)
+   - Запросіть 1 Free tier VM
+
+3. **Альтернатива - Azure Static Web Apps (БЕЗКОШТОВНО):**
+```bash
+chmod +x deploy-static-web-app.sh
+./deploy-static-web-app.sh
+```
+
+
+```bash
+#!/bin/bash
+
+echo "🚀 Deploying Django to Azure Static Web Apps (FREE!)"
+
+RESOURCE_GROUP="rg-django-static"
+STATIC_APP_NAME="django-static-$(date +%s)"
+LOCATION="Central US"
+
+echo "📋 Configuration:"
+echo "   Resource Group: $RESOURCE_GROUP"
+echo "   Static App Name: $STATIC_APP_NAME"
+echo "   Cost: FREE"
+
+# Переключаємося на студентську підписку
+az account set --subscription "826d896f-b844-48c3-998e-c8e36c27e681"
+
+# Створюємо resource group
+echo "🏗️ Creating resource group..."
+az group create --name $RESOURCE_GROUP --location "$LOCATION"
+
+# Для Static Web Apps потрібен GitHub репозиторій
+echo "📝 Note: This requires a GitHub repository with your code."
+echo "Please ensure your code is pushed to GitHub first."
+
+read -p "Enter your GitHub repository URL (https://github.com/username/repo): " GITHUB_REPO
+
+if [ -z "$GITHUB_REPO" ]; then
+    echo "❌ GitHub repository URL is required"
+    exit 1
+fi
+
+# Створюємо статичну конфігурацію
+cat > staticwebapp.config.json << 'EOF'
+{
+  "routes": [
+    {
+      "route": "/static/*",
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "route": "/*",
+      "serve": "/index.html",
+      "statusCode": 200
+    }
+  ],
+  "responseOverrides": {
+    "404": {
+      "redirect": "/index.html",
+      "statusCode": 200
+    }
+  }
+}
+EOF
+
+# Створюємо GitHub Actions workflow
+mkdir -p .github/workflows
+cat > .github/workflows/azure-static-web-apps.yml << 'EOF'
+name: Azure Static Web Apps CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [ main ]
+
+jobs:
+  build_and_deploy_job:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    runs-on: ubuntu-latest
+    name: Build and Deploy Job
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      - name: Collect static files
+        run: |
+          python manage.py collectstatic --noinput
+      
+      - name: Build And Deploy
+        id: builddeploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "/"
+          api_location: ""
+          output_location: "hello_world/staticfiles"
+
+  close_pull_request_job:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    name: Close Pull Request Job
+    steps:
+      - name: Close Pull Request
+        id: closepullrequest
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: "close"
+EOF
+
+echo "✅ Configuration files created!"
+echo ""
+echo "📋 Next steps:"
+echo "1. Commit and push these files to your GitHub repository"
+echo "2. Go to Azure Portal → Create Resource → Static Web Apps"
+echo "3. Connect your GitHub repository"
+echo "4. Azure will automatically deploy your app"
+echo ""
+echo "💰 Cost: FREE (with 100GB bandwidth/month)"
+
+```
+
+
+### **💡 Найпростіше рішення:**
+
+Спробуйте **студентську підписку** в різних регіонах - у неї може бути доступна квота:
+
+```bash
+az account set --subscription "Azure для учащихся"
+./deploy-multi-region.sh
+```
+
+**Який варіант спробуєте?** Студентські підписки зазвичай мають більше безкоштовних ресурсів!
+
+--------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
