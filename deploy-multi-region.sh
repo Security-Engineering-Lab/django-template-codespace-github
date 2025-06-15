@@ -68,7 +68,7 @@ fi
 
 # Переключаємося на студентську підписку
 echo "🔄 Switching to student subscription..."
-az account set --subscription "826d896f-b844-48c3-998e-c8e36c27e681"
+az account set --subscription "Azure для учащихся"
 
 SUBSCRIPTION=$(az account show --query name -o tsv)
 echo "📊 Using subscription: $SUBSCRIPTION"
