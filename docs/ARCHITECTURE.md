@@ -9,40 +9,23 @@ secureweb-capstone/
 ├── .github/
 │   └── workflows/
 │       └── ci.yml
-├── secureweb/
+├── hello_world/
 │   ├── __init__.py
 │   ├── settings.py
 │   ├── urls.py
 │   ├── wsgi.py
 │   └── celery.py
-├── accounts/
-│   ├── __init__.py
-│   ├── models.py
-│   ├── views.py
-│   ├── forms.py
-│   ├── urls.py
-│   └── admin.py
-├── security/
-│   ├── __init__.py
-│   ├── middleware.py
-│   ├── monitoring.py
-│   ├── views.py
-│   ├── urls.py
-│   └── utils.py
-├── templates/
+├   templates/
 │   ├── base.html
 │   ├── home.html
 │   ├── accounts/
 │   │   ├── login.html
 │   │   └── dashboard.html
-│   └── security/
-│       └── dashboard.html
+│   └── core/
+│       └── view.py
 ├── static/
-│   ├── css/
-│   │   └── dashboard.css
-│   ├── js/
-│   │   └── dashboard.js
-│   └── images/
+│   ├── Octocat.png
+│   └── main.css
 ├── terraform/
 │   ├── main.tf
 │   ├── variables.tf
@@ -50,6 +33,8 @@ secureweb-capstone/
 ├── docs/
 │   ├── README.md
 │   ├── ARCHITECTURE.md
+│   ├── AZURE_DEVOPS.md
+│   ├── SETUP.md
 │   └── DEPLOYMENT.md
 ├── requirements.txt
 ├── .env.example
