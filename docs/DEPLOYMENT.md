@@ -49,6 +49,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 **Крок 3: Оновіть YAML файл**---
 
+
 ## 💰 **Рішення 3: Платна опція (якщо потрібно негайно)**
 
 ### **Придбайте Microsoft-hosted parallelism:**
@@ -243,6 +244,90 @@ tar zxvf vsts-agent-linux-x64-3.232.3.tar.gz
 ```
 
 **Крок 3: Оновіть YAML файл**---
+
+```yaml
+
+# Minimal Django Pipeline - No parallelism required
+name: Django-Simple-Deploy-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+- main
+
+variables:
+  pythonVersion: '3.11'
+  azureServiceConnection: 'azure-production'  # Замініть на вашу назву
+  webAppName: 'django-template-prod'          # Замініть на вашу назву
+  resourceGroupName: 'rg-django-template'
+
+# Використовуємо лише один stage для економії ресурсів
+stages:
+- stage: BuildAndDeploy
+  displayName: 'Build and Deploy Django App'
+  jobs:
+  - job: BuildDeployJob
+    pool:
+      name: 'MyPool'  # Використовуємо self-hosted агент
+    timeoutInMinutes: 30
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Use Python $(pythonVersion)'
+
+    - script: |
+        echo "🐍 Installing dependencies..."
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+      displayName: 'Install dependencies'
+
+    - script: |
+        echo "✅ Basic Django check..."
+        python manage.py check
+      displayName: 'Django check'
+
+    - script: |
+        echo "📦 Collecting static files..."
+        python manage.py collectstatic --noinput
+      displayName: 'Collect static files'
+
+    - task: ArchiveFiles@2
+      displayName: 'Create deployment package'
+      inputs:
+        rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: $(Build.ArtifactStagingDirectory)/app.zip
+        replaceExistingArchive: true
+
+    - task: AzureCLI@2
+      displayName: 'Create Azure resources'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Create resources if they don't exist
+          az group create --name $(resourceGroupName) --location "East US" || true
+          az appservice plan create --name asp-$(webAppName) --resource-group $(resourceGroupName) --sku F1 --is-linux || true
+          az webapp create --name $(webAppName) --resource-group $(resourceGroupName) --plan asp-$(webAppName) --runtime "PYTHON|3.11" || true
+
+    - task: AzureWebApp@1
+      displayName: 'Deploy to Azure App Service'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        appType: 'webAppLinux'
+        appName: $(webAppName)
+        package: $(Build.ArtifactStagingDirectory)/app.zip
+        runtimeStack: 'PYTHON|3.11'
+        startUpCommand: 'gunicorn --bind=0.0.0.0 --timeout 600 hello_world.wsgi'
+
+    - script: |
+        echo "🎉 Deployment completed!"
+        echo "🌐 Your app should be available at: https://$(webAppName).azurewebsites.net"
+      displayName: 'Deployment summary'
+
+```
+
 
 ## 🎯 **Рішення 2: GitHub Actions (Альтернатива)**
 
