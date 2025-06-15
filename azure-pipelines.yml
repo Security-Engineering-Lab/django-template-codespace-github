@@ -1,0 +1,275 @@
+# Azure DevOps Pipeline for Django Template
+# Automated build, test, and deployment to Azure App Service
+
+name: Django-Template-CI-CD-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  branches:
+    include:
+    - main
+    - develop
+    - feature/*
+  paths:
+    exclude:
+    - README.md
+    - docs/**
+    - "*.md"
+
+pr:
+  branches:
+    include:
+    - main
+    - develop
+
+variables:
+  # Build Configuration
+  pythonVersion: '3.11'
+  vmImageName: 'ubuntu-latest'
+  
+  # Azure Configuration
+  azureServiceConnection: 'azure-production'
+  resourceGroupName: 'rg-django-template'
+  location: 'East US'
+  
+  # Environment-specific variables
+  ${{ if eq(variables['Build.SourceBranchName'], 'main') }}:
+    environmentName: 'production'
+    webAppName: 'django-template-prod'
+    appServiceSku: 'B1'
+  ${{ elseif eq(variables['Build.SourceBranchName'], 'develop') }}:
+    environmentName: 'staging'
+    webAppName: 'django-template-staging'
+    appServiceSku: 'F1'
+  ${{ else }}:
+    environmentName: 'development'
+    webAppName: 'django-template-dev-$(Build.BuildId)'
+    appServiceSku: 'F1'
+
+stages:
+- stage: Validate
+  displayName: 'Code Quality & Security'
+  jobs:
+  - job: CodeQuality
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Use Python $(pythonVersion)'
+
+    - script: |
+        python -m venv venv
+        source venv/bin/activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install flake8 bandit safety black isort
+      displayName: 'Install dependencies and linting tools'
+
+    - script: |
+        source venv/bin/activate
+        echo "🔍 Running code formatting check..."
+        black --check --diff .
+        echo "📝 Running import sorting check..."
+        isort --check-only --diff .
+        echo "🧹 Running linting..."
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      displayName: 'Code quality checks'
+
+    - script: |
+        source venv/bin/activate
+        echo "🔒 Running security scan..."
+        bandit -r . -f json -o bandit-report.json || true
+        echo "🛡️ Checking for known security vulnerabilities..."
+        safety check --json --output safety-report.json || true
+      displayName: 'Security scanning'
+
+    - task: PublishTestResults@2
+      condition: always()
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: '**/test-results.xml'
+        failTaskOnFailedTests: false
+      displayName: 'Publish security scan results'
+
+- stage: Build
+  displayName: 'Build Application'
+  dependsOn: Validate
+  jobs:
+  - job: BuildJob
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Use Python $(pythonVersion)'
+
+    - script: |
+        echo "🐍 Setting up Python environment..."
+        python -m venv venv
+        source venv/bin/activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+      displayName: 'Install Python dependencies'
+
+    - script: |
+        echo "🧪 Running Django tests..."
+        source venv/bin/activate
+        python manage.py test --verbosity=2 --keepdb
+      displayName: 'Run Django tests'
+
+    - script: |
+        echo "✅ Running Django system checks..."
+        source venv/bin/activate
+        python manage.py check --deploy --fail-level WARNING
+      displayName: 'Django deployment checks'
+
+    - script: |
+        echo "📦 Collecting static files..."
+        source venv/bin/activate
+        python manage.py collectstatic --noinput --clear
+      displayName: 'Collect static files'
+
+    - script: |
+        echo "📋 Creating deployment package..."
+        # Remove unnecessary files from deployment
+        rm -rf venv/
+        rm -rf .git/
+        rm -rf __pycache__/
+        find . -name "*.pyc" -delete
+        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+      displayName: 'Clean up deployment package'
+
+    - task: ArchiveFiles@2
+      displayName: 'Archive application files'
+      inputs:
+        rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: $(Build.ArtifactStagingDirectory)/django-app-$(Build.BuildId).zip
+        replaceExistingArchive: true
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish build artifact'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'django-app'
+        publishLocation: 'Container'
+
+- stage: DeployInfrastructure
+  displayName: 'Deploy Azure Infrastructure'
+  dependsOn: Build
+  condition: and(succeeded(), or(eq(variables['Build.SourceBranchName'], 'main'), eq(variables['Build.SourceBranchName'], 'develop')))
+  jobs:
+  - job: DeployInfra
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Deploy Azure App Service'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🏗️ Creating Azure infrastructure..."
+          
+          # Create resource group
+          az group create --name $(resourceGroupName) --location "$(location)"
+          
+          # Create App Service Plan
+          az appservice plan create \
+            --name asp-$(webAppName) \
+            --resource-group $(resourceGroupName) \
+            --sku $(appServiceSku) \
+            --is-linux
+          
+          # Create Web App
+          az webapp create \
+            --name $(webAppName) \
+            --resource-group $(resourceGroupName) \
+            --plan asp-$(webAppName) \
+            --runtime "PYTHON|3.11"
+          
+          # Configure Web App settings
+          az webapp config appsettings set \
+            --name $(webAppName) \
+            --resource-group $(resourceGroupName) \
+            --settings \
+              DJANGO_SETTINGS_MODULE="hello_world.settings" \
+              DJANGO_DEBUG="False" \
+              WEBSITE_HTTPLOGGING_RETENTION_DAYS="3" \
+              SCM_DO_BUILD_DURING_DEPLOYMENT="true"
+
+- stage: Deploy
+  displayName: 'Deploy to Azure App Service'
+  dependsOn: DeployInfrastructure
+  condition: succeeded()
+  jobs:
+  - deployment: DeployApp
+    pool:
+      vmImage: $(vmImageName)
+    environment: '$(environmentName)'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: django-app
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy Django application'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              appType: 'webAppLinux'
+              appName: $(webAppName)
+              package: $(Pipeline.Workspace)/django-app/django-app-$(Build.BuildId).zip
+              runtimeStack: 'PYTHON|3.11'
+              startUpCommand: 'bash deploy/startup.sh'
+
+          - task: AzureCLI@2
+            displayName: 'Post-deployment verification'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🏥 Running post-deployment health check..."
+                APP_URL="https://$(webAppName).azurewebsites.net"
+                
+                # Wait for app to start
+                sleep 60
+                
+                # Health check
+                HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $APP_URL || echo "000")
+                
+                if [ "$HTTP_STATUS" -eq 200 ]; then
+                  echo "✅ Health check passed! App is running at: $APP_URL"
+                  echo "##vso[task.setvariable variable=APP_URL;isOutput=true]$APP_URL"
+                else
+                  echo "❌ Health check failed! HTTP Status: $HTTP_STATUS"
+                  echo "🔍 Checking application logs..."
+                  az webapp log tail --name $(webAppName) --resource-group $(resourceGroupName) --timeout 30
+                  exit 1
+                fi
+
+- stage: PostDeploy
+  displayName: 'Post-Deployment Tasks'
+  dependsOn: Deploy
+  condition: succeeded()
+  jobs:
+  - job: Notifications
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - script: |
+        echo "🎉 Deployment completed successfully!"
+        echo "🌐 Application URL: https://$(webAppName).azurewebsites.net"
+        echo "📊 Environment: $(environmentName)"
+        echo "🏷️ Build: $(Build.BuildNumber)"
+        
+        # You can add Slack/Teams notifications here
+        echo "📧 Sending notifications..."
+        
+      displayName: 'Send deployment notifications'
