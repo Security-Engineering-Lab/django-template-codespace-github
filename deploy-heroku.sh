@@ -77,10 +77,20 @@ psycopg2-binary>=2.9.0
 EOF
 
 echo "🔐 Login to Heroku..."
-heroku login --interactive
+echo "📝 Note: If you have MFA enabled, use browser login"
+# Використовуємо browser login замість interactive для MFA
+heroku login
 
 echo "🏗️ Creating Heroku app..."
 heroku create $APP_NAME
+
+# Перевіряємо чи створився додаток
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to create Heroku app. Please check your authentication."
+    echo "💡 Try running: heroku auth:token"
+    echo "💡 Or visit: https://dashboard.heroku.com/account"
+    exit 1
+fi
 
 echo "📦 Setting up buildpacks..."
 heroku buildpacks:set heroku/python --app $APP_NAME
@@ -90,7 +100,10 @@ heroku config:set DEBUG=False --app $APP_NAME
 heroku config:set DJANGO_SETTINGS_MODULE=hello_world.settings --app $APP_NAME
 
 echo "🗄️ Adding PostgreSQL database..."
-heroku addons:create heroku-postgresql:essential-0 --app $APP_NAME
+# Використовуємо безкоштовний план postgres
+heroku addons:create heroku-postgresql:essential-0 --app $APP_NAME || \
+heroku addons:create heroku-postgresql:mini --app $APP_NAME || \
+echo "⚠️ Could not add PostgreSQL addon. You may need to verify your account."
 
 echo "📝 Preparing Git repository..."
 if [ ! -d ".git" ]; then
@@ -101,27 +114,54 @@ fi
 
 echo "🚀 Deploying to Heroku..."
 heroku git:remote --app $APP_NAME
+
+# Додаємо всі файли та комітимо
 git add .
 git commit -m "Deploy to Heroku" || echo "No changes to commit"
-git push heroku main
 
-echo "🔧 Running database migrations..."
-heroku run python manage.py migrate --app $APP_NAME
+# Перевіряємо чи існує remote
+if git remote get-url heroku &> /dev/null; then
+    echo "📤 Pushing to Heroku..."
+    git push heroku main || git push heroku master
+else
+    echo "❌ Heroku remote not found. Adding manually..."
+    git remote add heroku https://git.heroku.com/$APP_NAME.git
+    git push heroku main || git push heroku master
+fi
 
-echo "📊 Collecting static files..."
-heroku run python manage.py collectstatic --noinput --app $APP_NAME
-
-# Отримуємо URL додатку
-APP_URL=$(heroku apps:info $APP_NAME --json | python3 -c "import sys, json; print(json.load(sys.stdin)['app']['web_url'])")
-
-echo ""
-echo "✅ Deployment completed!"
-echo "🌐 Your Django app: $APP_URL"
-echo "💰 Cost: FREE (with limitations)"
-echo "🏷️ App Name: $APP_NAME"
-echo ""
-echo "📝 Useful commands:"
-echo "   View logs: heroku logs --tail --app $APP_NAME"
-echo "   Run shell: heroku run python manage.py shell --app $APP_NAME"
-echo "   Scale down: heroku ps:scale web=0 --app $APP_NAME"
-echo "   Delete app: heroku apps:destroy $APP_NAME"
+# Перевіряємо успішність деплою
+if [ $? -eq 0 ]; then
+    echo "🔧 Running database migrations..."
+    heroku run python manage.py migrate --app $APP_NAME
+    
+    echo "📊 Collecting static files..."
+    heroku run python manage.py collectstatic --noinput --app $APP_NAME
+    
+    # Отримуємо URL додатку
+    APP_URL="https://$APP_NAME.herokuapp.com"
+    
+    echo ""
+    echo "✅ Deployment completed successfully!"
+    echo "🌐 Your Django app: $APP_URL"
+    echo "💰 Cost: FREE (with limitations)"
+    echo "🏷️ App Name: $APP_NAME"
+    echo ""
+    echo "📝 Useful commands:"
+    echo "   View logs: heroku logs --tail --app $APP_NAME"
+    echo "   Run shell: heroku run python manage.py shell --app $APP_NAME"
+    echo "   Scale down: heroku ps:scale web=0 --app $APP_NAME"
+    echo "   Delete app: heroku apps:destroy $APP_NAME"
+    echo "   Open app: heroku open --app $APP_NAME"
+    echo ""
+    echo "🔍 Next steps:"
+    echo "   1. Visit your app at: $APP_URL"
+    echo "   2. Check logs if needed: heroku logs --tail --app $APP_NAME"
+    echo "   3. Set up custom domain (optional): heroku domains:add yourdomain.com --app $APP_NAME"
+else
+    echo "❌ Deployment failed!"
+    echo "📋 Troubleshooting:"
+    echo "   1. Check Heroku status: https://status.heroku.com"
+    echo "   2. Verify authentication: heroku auth:whoami"
+    echo "   3. Check logs: heroku logs --app $APP_NAME"
+    echo "   4. Verify app exists: heroku apps:info $APP_NAME"
+fi
